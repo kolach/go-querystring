@@ -31,6 +31,41 @@ v, _ := query.Values(opt)
 fmt.Print(v.Encode()) // will output: "q=foo&all=true&page=2"
 ```
 
+Filtering by tag options:
+
+```go
+type Options struct {
+  Query   string `url:"q,bar"`
+  ShowAll bool   `url:"all"`
+  Page    int    `url:"page,bar,buzz"`
+}
+
+opt := Options{ "foo", true, 2 }
+
+// with a single tag options filter
+v, _ := query.Values(opt, query.With("bar"))
+fmt.Print(v.Encode()) // will output: "q=foo&page=2"
+
+// with multiple tag options filters
+v, _ = query.Values(opt, query.With("bar"), query.With("buzz"))
+fmt.Print(v.Encode()) // will output: "page=2"
+
+// custom filter function
+func WithPrefix(prefix string) bool {
+  return func(options query.TagOptions) bool {
+    for _, op := range options {
+      if strings.HasPrefix(op, prefix) {
+        return true
+      }
+    }
+    return false
+  }
+}
+
+v, _ = query.Values(opt, query.WithPrefix("ba"))
+fmt.Print(v.Encode()) // will output: "q=foo&page=2"
+```
+
 [go-github]: https://github.com/google/go-github/commit/994f6f8405f052a117d2d0b500054341048fbb08
 
 ## License ##

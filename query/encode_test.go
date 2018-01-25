@@ -204,6 +204,56 @@ func TestValues_omitEmpty(t *testing.T) {
 	}
 }
 
+func TestValues_withFilter(t *testing.T) {
+	str := ""
+	s := struct {
+		a string
+		A string
+		B string  `url:",omitempty,foo"`
+		C string  `url:"-"`
+		D string  `url:"omitempty,foo"` // actually named omitempty, not an option
+		E *string `url:",omitempty,foo"`
+	}{B: "bar", E: &str}
+
+	v, err := Values(s, With("foo"))
+	if err != nil {
+		t.Errorf("Values(%q) returned error: %v", s, err)
+	}
+
+	want := url.Values{
+		"B":         {"bar"},
+		"omitempty": {""},
+		"E":         {""}, // E is included because the pointer is not empty, even though the string being pointed to is
+	}
+	if !reflect.DeepEqual(want, v) {
+		t.Errorf("Values(%q) returned %v, want %v", s, v, want)
+	}
+}
+
+func TestValues_withMultipleFilters(t *testing.T) {
+	str := ""
+	s := struct {
+		a string
+		A string
+		B string  `url:",omitempty,foo,bar"`
+		C string  `url:"-"`
+		D string  `url:"omitempty,foo"` // actually named omitempty, not an option
+		E *string `url:",omitempty,foo"`
+	}{B: "buzz", E: &str}
+
+	v, err := Values(s, With("foo"), With("bar"))
+	if err != nil {
+		t.Errorf("Values(%q) returned error: %v", s, err)
+	}
+
+	want := url.Values{
+		"B": {"buzz"},
+	}
+	if !reflect.DeepEqual(want, v) {
+		t.Errorf("Values(%q) returned %v, want %v", s, v, want)
+	}
+}
+
 type A struct {
 	B
 }

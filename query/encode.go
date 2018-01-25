@@ -40,6 +40,16 @@ type Encoder interface {
 	EncodeValues(key string, v *url.Values) error
 }
 
+// OptionsFilterFunc is functional type used to narrow down the result of Values
+type OptionsFilterFunc func(TagOptions) bool
+
+// With returns true if options array contain specified option
+func With(option string) OptionsFilterFunc {
+	return func(options TagOptions) bool {
+		return options.Contains(option)
+	}
+}
+
 // Values returns the url.Values encoding of v.
 //
 // Values expects to be passed a struct, and traverses it recursively using the
@@ -110,7 +120,7 @@ type Encoder interface {
 //
 // Multiple fields that encode to the same URL parameter name will be included
 // as multiple URL values of the same name.
-func Values(v interface{}) (url.Values, error) {
+func Values(v interface{}, filters ...OptionsFilterFunc) (url.Values, error) {
 	values := make(url.Values)
 	val := reflect.ValueOf(v)
 	for val.Kind() == reflect.Ptr {
@@ -128,17 +138,19 @@ func Values(v interface{}) (url.Values, error) {
 		return nil, fmt.Errorf("query: Values() expects struct input. Got %v", val.Kind())
 	}
 
-	err := reflectValue(values, val, "")
+	err := reflectValue(values, val, "", filters...)
 	return values, err
 }
 
 // reflectValue populates the values parameter from the struct fields in val.
 // Embedded structs are followed recursively (using the rules defined in the
 // Values function documentation) breadth-first.
-func reflectValue(values url.Values, val reflect.Value, scope string) error {
+func reflectValue(values url.Values, val reflect.Value, scope string, filters ...OptionsFilterFunc) error {
 	var embedded []reflect.Value
 
 	typ := val.Type()
+
+OUTER:
 	for i := 0; i < typ.NumField(); i++ {
 		sf := typ.Field(i)
 		if sf.PkgPath != "" && !sf.Anonymous { // unexported
@@ -167,6 +179,12 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 
 		if opts.Contains("omitempty") && isEmptyValue(sv) {
 			continue
+		}
+
+		for _, filter := range filters {
+			if !filter(opts) {
+				continue OUTER
+			}
 		}
 
 		if sv.Type().Implements(encoderType) {
@@ -247,7 +265,7 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 }
 
 // valueString returns the string representation of a value.
-func valueString(v reflect.Value, opts tagOptions) string {
+func valueString(v reflect.Value, opts TagOptions) string {
 	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			return ""
@@ -298,19 +316,19 @@ func isEmptyValue(v reflect.Value) bool {
 	return false
 }
 
-// tagOptions is the string following a comma in a struct field's "url" tag, or
+// TagOptions is the string following a comma in a struct field's "url" tag, or
 // the empty string. It does not include the leading comma.
-type tagOptions []string
+type TagOptions []string
 
 // parseTag splits a struct field's url tag into its name and comma-separated
 // options.
-func parseTag(tag string) (string, tagOptions) {
+func parseTag(tag string) (string, TagOptions) {
 	s := strings.Split(tag, ",")
 	return s[0], s[1:]
 }
 
 // Contains checks whether the tagOptions contains the specified option.
-func (o tagOptions) Contains(option string) bool {
+func (o TagOptions) Contains(option string) bool {
 	for _, s := range o {
 		if s == option {
 			return true
